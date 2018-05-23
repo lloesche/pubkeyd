@@ -1,0 +1,8 @@
+package: github.com/lloesche/pubkeyd
+import:
+- package: github.com/fatz/ghpubkey-go
+  subpackages:
+  - ghpubkey
+- package: github.com/gorilla/mux
+- package: github.com/op/go-logging
+- package: github.com/oswell/onelogin-go
