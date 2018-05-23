@@ -7,11 +7,11 @@ Usage of ./pubkeyd:
   -client-secret string
         OneLogin Client Secret [env CLIENT_SECRET]
   -port int
-        TCP port to listen on (default: 2020) (default 2020)
+        TCP port to listen on (default 2020)
   -refresh int
-        OneLogin refresh interval in seconds (default: 900) (default 900)
+        OneLogin refresh interval in seconds (default 900)
   -shard string
-        OneLogin shard (default: us) [env SHARD] (default "us")
+        OneLogin shard [env SHARD] (default "us")
   -subdomain string
         OneLogin Subdomain [env SUBDOMAIN]
   -verbose
