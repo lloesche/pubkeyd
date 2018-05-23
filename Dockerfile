@@ -1,17 +1,12 @@
 FROM golang:alpine
 EXPOSE 2020
 
-COPY pubkeyd.go /tmp/pubkeyd/
+COPY . /go/src/pubkeyd/
 
-WORKDIR /tmp/pubkeyd
-RUN apk add --no-cache tini git \
-    && go get github.com/fatz/ghpubkey-go/ghpubkey \
-    && go get github.com/gorilla/mux \
-    && go get github.com/op/go-logging \
-    && go get github.com/oswell/onelogin-go \
+WORKDIR /go/src/pubkeyd
+RUN apk add --no-cache tini \
     && go build \
-    && cp pubkeyd /sbin/ \
-    && rm -rf /tmp/pubkeyd
+    && cp pubkeyd /sbin/
 WORKDIR /root
 
 ENTRYPOINT ["/sbin/tini", "--", "/sbin/pubkeyd"]
