@@ -21,12 +21,12 @@ var mutex = &sync.Mutex{}
 
 // main function to boot up everything
 func main() {
-	shard := flag.String("shard", flagFromEnv("SHARD"), "OneLogin shard (default: us) [env SHARD]")
+	shard := flag.String("shard", flagFromEnv("SHARD"), "OneLogin shard [env SHARD]")
 	clientID := flag.String("client-id", flagFromEnv("CLIENT_ID"), "OneLogin Client ID [env CLIENT_ID]")
 	clientSecret := flag.String("client-secret", flagFromEnv("CLIENT_SECRET"), "OneLogin Client Secret [env CLIENT_SECRET]")
 	subdomain := flag.String("subdomain", flagFromEnv("SUBDOMAIN"), "OneLogin Subdomain [env SUBDOMAIN]")
-	refreshInterval := flag.Int("refresh", 900, "OneLogin refresh interval in seconds (default: 900)")
-	port := flag.Int("port", 2020, "TCP port to listen on (default: 2020)")
+	refreshInterval := flag.Int("refresh", 900, "OneLogin refresh interval in seconds")
+	port := flag.Int("port", 2020, "TCP port to listen on")
 	verbose := flag.Bool("verbose", false, "Verbose logging")
 	flag.Parse()
 
