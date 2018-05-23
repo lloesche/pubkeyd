@@ -75,6 +75,7 @@ func main() {
 	listenOn := ":" + strconv.Itoa(*port)
 	router.HandleFunc("/authorized_keys/{id}", getAuthorizedKeys).Methods("GET")
 	router.HandleFunc("/githubname/{id}", getGithubName).Methods("GET")
+	router.HandleFunc("/health", getHealth).Methods("GET")
 	log.Infof("Listening on %s", listenOn)
 	log.Fatal(http.ListenAndServe(listenOn, router))
 }
@@ -120,6 +121,13 @@ func getGithubName(w http.ResponseWriter, r *http.Request) {
 	log.Errorf("User %s not found", params["id"])
 	w.WriteHeader(http.StatusNotFound)
 	w.Write([]byte("404 user not found\n"))
+}
+
+func getHealth(w http.ResponseWriter, r *http.Request) {
+	log.Debug("Returning health status")
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("ok\n"))
 }
 
 func getGithubUsers(onelogin onelogin.OneLogin) (map[string]string, error) {
