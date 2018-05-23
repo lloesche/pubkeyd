@@ -1,0 +1,57 @@
+{
+    "id": "/tools/pubkeyd",
+    "instances": 2,
+    "cpus": 0.5,
+    "mem": 1024,
+    "labels": {
+      "HAPROXY_0_VHOST": "pubkey.example.com",
+      "HAPROXY_GROUP": "external",
+      "HAPROXY_0_REDIRECT_TO_HTTPS": "true"
+    },
+    "container": {
+      "portMappings": [
+        {
+          "containerPort": 2020,
+          "hostPort": 0,
+          "protocol": "tcp",
+          "name": "http"
+        }
+      ],
+      "type": "DOCKER",
+      "docker": {
+        "image": "lloesche/pubkeyd",
+        "forcePullImage": true,
+        "privileged": false
+      }
+    },
+    "healthChecks": [
+      {
+        "portIndex": 0,
+        "protocol": "MESOS_HTTP",
+        "path": "/health"
+      }
+    ],
+    "networks": [
+      {
+        "mode": "container/bridge"
+      }
+    ],
+    "requirePorts": false,
+    "env": {
+        "CLIENT_ID": {
+          "secret": "secret0"
+        },
+        "CLIENT_SECRET": {
+          "secret": "secret1"
+        }
+      },
+      "secrets": {
+      "secret0": {
+        "source": "tools/pubkeyd/client-id"
+      },
+      "secret1": {
+        "source": "tools/pubkeyd/client-secret"
+      }
+    }
+  }
+  
