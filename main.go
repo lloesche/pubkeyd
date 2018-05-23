@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/fatz/ghpubkey-go/ghpubkey"
 	"github.com/gorilla/mux"
 	"github.com/op/go-logging"
 	"github.com/oswell/onelogin-go"
@@ -71,9 +72,11 @@ func main() {
 	}()
 
 	router := mux.NewRouter()
+	listenOn := ":" + strconv.Itoa(*port)
 	router.HandleFunc("/authorized_keys/{id}", getAuthorizedKeys).Methods("GET")
 	router.HandleFunc("/githubname/{id}", getGithubName).Methods("GET")
-	log.Fatal(http.ListenAndServe(":"+strconv.Itoa(*port), router))
+	log.Infof("Listening on %s", listenOn)
+	log.Fatal(http.ListenAndServe(listenOn, router))
 }
 
 func getAuthorizedKeys(w http.ResponseWriter, r *http.Request) {
@@ -83,9 +86,18 @@ func getAuthorizedKeys(w http.ResponseWriter, r *http.Request) {
 	mutex.Unlock()
 	if ok {
 		log.Infof("Found user %s with github name %s", params["id"], githubName)
+		g := ghpubkey.NewGHPubKey()
+		authorizedKeys, err := g.RequestKeysForUser(githubName)
+		if err != nil {
+			log.Errorf("User %s found but pubkey unretrievable", params["id"])
+			w.WriteHeader(http.StatusServiceUnavailable)
+			w.Write([]byte("503 couldn't retrieve users public key\n"))
+			return
+		}
+		log.Infof("Returning public key of github user %s", githubName)
 		w.Header().Set("Content-Type", "text/plain")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(githubName + "\n"))
+		w.Write([]byte(authorizedKeys))
 		return
 	}
 	log.Errorf("User %s not found", params["id"])
