@@ -1,0 +1,25 @@
+hash: 1ede092263d1ca173b4a6668dba406cd0dde09a8b4cf150153303b55d8356dbe
+updated: 2018-05-23T22:10:27.7373653+02:00
+imports:
+- name: github.com/fatz/ghpubkey-go
+  version: f8e6d22cebcd221ba285e185e054e4261468058b
+  subpackages:
+  - ghpubkey
+- name: github.com/gorilla/context
+  version: 08b5f424b9271eedf6f9f0ce86cb9396ed337a42
+- name: github.com/gorilla/mux
+  version: c85619274f5d55a67491010f883a91f568b3a9b0
+- name: github.com/op/go-logging
+  version: 970db520ece77730c7e4724c61121037378659d9
+- name: github.com/oswell/onelogin-go
+  version: 35d2d8838f4aa2aced9b7ba6d0d83b5c6610abc2
+- name: golang.org/x/crypto
+  version: 75e913eb8a8e3d31a97b216de09de106a7b07681
+  subpackages:
+  - curve25519
+  - ed25519
+  - ed25519/internal/edwards25519
+  - internal/chacha20
+  - poly1305
+  - ssh
+testImports: []
