@@ -14,7 +14,7 @@ import (
 // GithubURL
 const GithubURL = "https://github.com"
 const GithubKeysEnding = "keys"
-const UsernameRegex = `^[a-z\d](?:[a-z\d]|-(?=[a-z\d])){0,38}$`
+const UsernameRegex = `^[a-zA-Z\d](?:[a-z\d]|-(?=[a-z\d])){0,38}$`
 
 type GHPubKey struct {
 	Client  *http.Client
@@ -123,6 +123,7 @@ func (g *GHPubKey) RequestKeysForUser(user string) (authorizedKeys string, err e
 // GHUsernameValid checks if a given username is a valid Github username
 func GHUsernameValid(user string) bool {
 	// r, err := regexp.Compile(`^[a-z0-9](?:[a-z0-9]|-(?=[a-z0-9])){0,38}$`)
+	user = strings.ToLower(user)
 	r := regexp.MustCompile(`^[a-z\d]([a-z0-9]|-([a-z0-9])){0,38}$`)
 
 	return r.MatchString(user)
