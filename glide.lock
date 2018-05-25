@@ -1,8 +1,8 @@
 hash: 1ede092263d1ca173b4a6668dba406cd0dde09a8b4cf150153303b55d8356dbe
-updated: 2018-05-24T15:50:59.9208852+02:00
+updated: 2018-05-25T14:42:08.7676104+02:00
 imports:
 - name: github.com/fatz/ghpubkey-go
-  version: b46eea67aaca1a729c041cebae651cf394345bba
+  version: cf540d93feda0a43bf4a8744800360a88239905a
   subpackages:
   - ghpubkey
 - name: github.com/gorilla/context
@@ -13,6 +13,8 @@ imports:
   version: 970db520ece77730c7e4724c61121037378659d9
 - name: github.com/oswell/onelogin-go
   version: 35d2d8838f4aa2aced9b7ba6d0d83b5c6610abc2
+- name: github.com/patrickmn/go-cache
+  version: a3647f8e31d79543b2d0f0ae2fe5c379d72cedc0
 - name: golang.org/x/crypto
   version: 159ae71589f303f9fbfd7528413e0fe944b9c1cb
   subpackages:
