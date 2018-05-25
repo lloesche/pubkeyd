@@ -1,7 +1,7 @@
 # pubkeyd [![Build Status](https://travis-ci.org/lloesche/pubkeyd.svg?branch=master)](https://travis-ci.org/lloesche/pubkeyd)
 OneLogin to Github public key daemon
 ```
-Usage of ./pubkeyd:
+Usage of pubkeyd:
   -auth string
         Authentication Token [env AUTH]
   -client-id string
@@ -12,6 +12,8 @@ Usage of ./pubkeyd:
         TCP port to listen on (default 2020)
   -refresh int
         OneLogin refresh interval in seconds (default 900)
+  -refresh-auth string
+        OneLogin Cache Refresh Authentication Token [env REFRESH_AUTH]
   -shard string
         OneLogin shard [env SHARD] (default "us")
   -subdomain string
