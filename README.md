@@ -1,4 +1,4 @@
-# pubkeyd
+# pubkeyd [![Build Status](https://travis-ci.org/lloesche/pubkeyd.svg?branch=master)](https://travis-ci.org/lloesche/pubkeyd)
 OneLogin to Github public key daemon
 ```
 Usage of ./pubkeyd:
