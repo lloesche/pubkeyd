@@ -2,6 +2,8 @@
 OneLogin to Github public key daemon
 ```
 Usage of ./pubkeyd:
+  -auth string
+        Authentication Token [env AUTH]
   -client-id string
         OneLogin Client ID [env CLIENT_ID]
   -client-secret string

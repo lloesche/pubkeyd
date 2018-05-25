@@ -31,6 +31,7 @@ func main() {
 	subdomain := flag.String("subdomain", flagFromEnv("SUBDOMAIN"), "OneLogin Subdomain [env SUBDOMAIN]")
 	refreshInterval := flag.Int("refresh", 900, "OneLogin refresh interval in seconds")
 	auth := flag.String("auth", flagFromEnv("AUTH"), "Authentication Token [env AUTH]")
+	refreshAuth := flag.String("refresh-auth", flagFromEnv("REFRESH_AUTH"), "OneLogin Cache Refresh Authentication Token [env REFRESH_AUTH]")
 	port := flag.Int("port", 2020, "TCP port to listen on")
 	verbose := flag.Bool("verbose", false, "Verbose logging")
 	flag.Parse()
@@ -71,14 +72,25 @@ func main() {
 	pubkeyCache = cache.New(2*time.Minute, 10*time.Minute)
 	router := mux.NewRouter()
 	listenOn := ":" + strconv.Itoa(*port)
-	router.HandleFunc("/authorized_keys/{id}", getAuthorizedKeys).Methods("GET")
-	router.HandleFunc("/authorized_keys/{id}", deleteAuthorizedKeys).Methods("DELETE")
-	router.HandleFunc("/githubname/{id}", getGithubName).Methods("GET")
 	router.HandleFunc("/health", getHealth).Methods("GET")
+	// fixme: refactor this
 	if *auth == "" {
-		router.HandleFunc("/refresh", doRefresh).Methods("GET")
+		router.HandleFunc("/authorized_keys/{id}", getAuthorizedKeys).Methods("GET")
+		router.HandleFunc("/authorized_keys/{id}", deleteAuthorizedKeys).Methods("DELETE")
+		router.HandleFunc("/githubname/{id}", getGithubName).Methods("GET")
 	} else {
-		router.HandleFunc("/refresh", doRefresh).Methods("GET").Queries("auth", *auth)
+		router.HandleFunc("/authorized_keys/{id}", getAuthorizedKeys).Methods("GET").Queries("auth", *auth)
+		router.HandleFunc("/authorized_keys/{id}", deleteAuthorizedKeys).Methods("DELETE").Queries("auth", *auth)
+		router.HandleFunc("/githubname/{id}", getGithubName).Methods("GET").Queries("auth", *auth)
+	}
+	if *refreshAuth == "" {
+		if *auth == "" {
+			router.HandleFunc("/refresh", doRefresh).Methods("GET")
+		} else {
+			router.HandleFunc("/refresh", doRefresh).Methods("GET").Queries("auth", *auth)
+		}
+	} else {
+		router.HandleFunc("/refresh", doRefresh).Methods("GET").Queries("auth", *refreshAuth)
 	}
 	log.Infof("Listening on %s", listenOn)
 	log.Fatal(http.ListenAndServe(listenOn, router))
