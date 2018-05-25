@@ -18,8 +18,10 @@ import (
 
 var log = logging.MustGetLogger("pubkeyd")
 var users map[string]string
-var mutex = &sync.Mutex{}
+var refreshMutex = &sync.RWMutex{}
 var pubkeyCache *cache.Cache
+var ol *onelogin.OneLogin
+var manualRefresh chan (bool)
 
 // main function to boot up everything
 func main() {
@@ -28,6 +30,7 @@ func main() {
 	clientSecret := flag.String("client-secret", flagFromEnv("CLIENT_SECRET"), "OneLogin Client Secret [env CLIENT_SECRET]")
 	subdomain := flag.String("subdomain", flagFromEnv("SUBDOMAIN"), "OneLogin Subdomain [env SUBDOMAIN]")
 	refreshInterval := flag.Int("refresh", 900, "OneLogin refresh interval in seconds")
+	auth := flag.String("auth", flagFromEnv("AUTH"), "Authentication Token [env AUTH]")
 	port := flag.Int("port", 2020, "TCP port to listen on")
 	verbose := flag.Bool("verbose", false, "Verbose logging")
 	flag.Parse()
@@ -41,33 +44,25 @@ func main() {
 		log.Error("Args client-id and client-secret are required")
 		os.Exit(1)
 	}
+	ol = onelogin.New(*shard, *clientID, *clientSecret, *subdomain, loglevel)
 
-	onelogin := onelogin.New(*shard, *clientID, *clientSecret, *subdomain, loglevel)
-
-	githubUsers, err := getGithubUsers(*onelogin)
-	if err != nil {
+	if err := refreshOneLoginUsers(); err != nil {
 		log.Error(err)
 		os.Exit(1)
 	}
-	users = githubUsers
 
-	ticker := time.NewTicker(time.Duration(*refreshInterval) * time.Second)
+	refreshTicker := time.NewTicker(time.Duration(*refreshInterval) * time.Second)
 	quit := make(chan struct{})
+	manualRefresh = make(chan bool)
 	go func() {
 		for {
 			select {
-			case <-ticker.C:
-				githubUsers, err := getGithubUsers(*onelogin)
-				if err != nil {
-					log.Error(err)
-					continue
-				}
-				mutex.Lock()
-				users = githubUsers
-				mutex.Unlock()
-
+			case <-refreshTicker.C:
+				refreshOneLoginUsers()
+			case <-manualRefresh:
+				refreshOneLoginUsers()
 			case <-quit:
-				ticker.Stop()
+				refreshTicker.Stop()
 				return
 			}
 		}
@@ -77,39 +72,76 @@ func main() {
 	router := mux.NewRouter()
 	listenOn := ":" + strconv.Itoa(*port)
 	router.HandleFunc("/authorized_keys/{id}", getAuthorizedKeys).Methods("GET")
+	router.HandleFunc("/authorized_keys/{id}", deleteAuthorizedKeys).Methods("DELETE")
 	router.HandleFunc("/githubname/{id}", getGithubName).Methods("GET")
 	router.HandleFunc("/health", getHealth).Methods("GET")
+	if *auth == "" {
+		router.HandleFunc("/refresh", doRefresh).Methods("GET")
+	} else {
+		router.HandleFunc("/refresh", doRefresh).Methods("GET").Queries("auth", *auth)
+	}
 	log.Infof("Listening on %s", listenOn)
 	log.Fatal(http.ListenAndServe(listenOn, router))
+}
+
+func refreshOneLoginUsers() error {
+	log.Debug("Refreshing OneLogin users")
+	githubUsers, err := getGithubUsers(*ol)
+	if err != nil {
+		return err
+	}
+	refreshMutex.Lock()
+	users = githubUsers
+	refreshMutex.Unlock()
+	return nil
+}
+
+func deleteAuthorizedKeys(w http.ResponseWriter, r *http.Request) {
+	params := mux.Vars(r)
+	user := params["id"]
+	log.Debugf("Received request to purge authorized_keys cache of user %s", user)
+	pubkeyCache.Delete(user)
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("Purging authorized_keys cache for user " + user + "\n"))
+}
+
+func doRefresh(w http.ResponseWriter, r *http.Request) {
+	log.Debug("Received request to refresh OneLogin users")
+	manualRefresh <- true
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("Refreshing OneLogin users\n"))
 }
 
 func getAuthorizedKeys(w http.ResponseWriter, r *http.Request) {
 	params := mux.Vars(r)
 	user := params["id"]
-	mutex.Lock()
+	refreshMutex.RLock()
 	githubName, ok := users[user]
-	mutex.Unlock()
+	refreshMutex.RUnlock()
+	w.Header().Set("Content-Type", "text/plain")
 	if ok {
 		log.Infof("Found user %s with github name %s", user, githubName)
 		var authorizedKeys string
 		cachedAuthorizedKeys, found := pubkeyCache.Get(user)
 		if found {
-			log.Debugf("Authorized keys for user %s found in cache", user)
+			log.Debugf("authorized_keys for user %s found in cache", user)
 			authorizedKeys = cachedAuthorizedKeys.(string)
 		} else {
-			log.Debugf("Authorized keys for user %s not found in cache", user)
+			log.Debugf("authorized_keys for user %s not found in cache", user)
 			g := ghpubkey.NewGHPubKey()
-			authorizedKeys, err := g.RequestKeysForUser(githubName)
+			var err error
+			authorizedKeys, err = g.RequestKeysForUser(githubName)
 			if err != nil {
-				log.Errorf("User %s found but pubkey unretrievable", user)
+				log.Errorf("User %s found but authorized_keys unretrievable", user)
 				w.WriteHeader(http.StatusServiceUnavailable)
-				w.Write([]byte("503 couldn't retrieve users public key\n"))
+				w.Write([]byte("503 couldn't retrieve users authorized_keys\n"))
 				return
 			}
 			pubkeyCache.Set(user, authorizedKeys, cache.DefaultExpiration)
 		}
-		log.Infof("Returning public key of github user %s", githubName)
-		w.Header().Set("Content-Type", "text/plain")
+		log.Infof("Returning authorized_keys of github user %s", githubName)
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(authorizedKeys))
 		return
@@ -121,12 +153,12 @@ func getAuthorizedKeys(w http.ResponseWriter, r *http.Request) {
 
 func getGithubName(w http.ResponseWriter, r *http.Request) {
 	params := mux.Vars(r)
-	mutex.Lock()
+	refreshMutex.RLock()
 	githubName, ok := users[params["id"]]
-	mutex.Unlock()
+	refreshMutex.RUnlock()
+	w.Header().Set("Content-Type", "text/plain")
 	if ok {
 		log.Infof("Found user %s with github name %s", params["id"], githubName)
-		w.Header().Set("Content-Type", "text/plain")
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(githubName + "\n"))
 		return
