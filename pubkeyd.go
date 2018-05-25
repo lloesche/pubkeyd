@@ -13,11 +13,13 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/op/go-logging"
 	"github.com/oswell/onelogin-go"
+	"github.com/patrickmn/go-cache"
 )
 
 var log = logging.MustGetLogger("pubkeyd")
 var users map[string]string
 var mutex = &sync.Mutex{}
+var pubkeyCache *cache.Cache
 
 // main function to boot up everything
 func main() {
@@ -71,6 +73,7 @@ func main() {
 		}
 	}()
 
+	pubkeyCache = cache.New(2*time.Minute, 10*time.Minute)
 	router := mux.NewRouter()
 	listenOn := ":" + strconv.Itoa(*port)
 	router.HandleFunc("/authorized_keys/{id}", getAuthorizedKeys).Methods("GET")
@@ -82,18 +85,28 @@ func main() {
 
 func getAuthorizedKeys(w http.ResponseWriter, r *http.Request) {
 	params := mux.Vars(r)
+	user := params["id"]
 	mutex.Lock()
-	githubName, ok := users[params["id"]]
+	githubName, ok := users[user]
 	mutex.Unlock()
 	if ok {
-		log.Infof("Found user %s with github name %s", params["id"], githubName)
-		g := ghpubkey.NewGHPubKey()
-		authorizedKeys, err := g.RequestKeysForUser(githubName)
-		if err != nil {
-			log.Errorf("User %s found but pubkey unretrievable", params["id"])
-			w.WriteHeader(http.StatusServiceUnavailable)
-			w.Write([]byte("503 couldn't retrieve users public key\n"))
-			return
+		log.Infof("Found user %s with github name %s", user, githubName)
+		var authorizedKeys string
+		cachedAuthorizedKeys, found := pubkeyCache.Get(user)
+		if found {
+			log.Debugf("Authorized keys for user %s found in cache", user)
+			authorizedKeys = cachedAuthorizedKeys.(string)
+		} else {
+			log.Debugf("Authorized keys for user %s not found in cache", user)
+			g := ghpubkey.NewGHPubKey()
+			authorizedKeys, err := g.RequestKeysForUser(githubName)
+			if err != nil {
+				log.Errorf("User %s found but pubkey unretrievable", user)
+				w.WriteHeader(http.StatusServiceUnavailable)
+				w.Write([]byte("503 couldn't retrieve users public key\n"))
+				return
+			}
+			pubkeyCache.Set(user, authorizedKeys, cache.DefaultExpiration)
 		}
 		log.Infof("Returning public key of github user %s", githubName)
 		w.Header().Set("Content-Type", "text/plain")
@@ -101,7 +114,7 @@ func getAuthorizedKeys(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(authorizedKeys))
 		return
 	}
-	log.Errorf("User %s not found", params["id"])
+	log.Errorf("User %s not found", user)
 	w.WriteHeader(http.StatusNotFound)
 	w.Write([]byte("404 user not found\n"))
 }
