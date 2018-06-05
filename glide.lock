@@ -1,22 +1,55 @@
 hash: 1ede092263d1ca173b4a6668dba406cd0dde09a8b4cf150153303b55d8356dbe
-updated: 2018-05-25T14:42:08.7676104+02:00
+updated: 2018-06-05T10:36:30.6372719+02:00
 imports:
+- name: github.com/beorn7/perks
+  version: 3a771d992973f24aa725d07868b467d1ddfceafb
+  subpackages:
+  - quantile
 - name: github.com/fatz/ghpubkey-go
   version: cf540d93feda0a43bf4a8744800360a88239905a
   subpackages:
   - ghpubkey
+- name: github.com/golang/protobuf
+  version: 3a3da3a4e26776cc22a79ef46d5d58477532dede
+  subpackages:
+  - proto
 - name: github.com/gorilla/context
   version: 08b5f424b9271eedf6f9f0ce86cb9396ed337a42
 - name: github.com/gorilla/mux
-  version: c85619274f5d55a67491010f883a91f568b3a9b0
+  version: e0b5abaaae35242fa74372f26c24107711702a4e
+- name: github.com/matttproud/golang_protobuf_extensions
+  version: c12348ce28de40eed0136aa2b644d0ee0650e56c
+  subpackages:
+  - pbutil
 - name: github.com/op/go-logging
   version: 970db520ece77730c7e4724c61121037378659d9
 - name: github.com/oswell/onelogin-go
   version: 35d2d8838f4aa2aced9b7ba6d0d83b5c6610abc2
 - name: github.com/patrickmn/go-cache
-  version: a3647f8e31d79543b2d0f0ae2fe5c379d72cedc0
+  version: 9f6ff22cfff829561052f5886ec80a2ac148b4eb
+- name: github.com/prometheus/client_golang
+  version: 7540c0707421d7c58cfce34f4294d1b1f25f240d
+  subpackages:
+  - prometheus
+  - prometheus/promhttp
+- name: github.com/prometheus/client_model
+  version: 99fa1f4be8e564e8a6b613da7fa6f46c9edafc6c
+  subpackages:
+  - go
+- name: github.com/prometheus/common
+  version: 7600349dcfe1abd18d72d3a1770870d9800a7801
+  subpackages:
+  - expfmt
+  - internal/bitbucket.org/ww/goautoneg
+  - model
+- name: github.com/prometheus/procfs
+  version: 94663424ae5ae9856b40a9f170762b4197024661
+  subpackages:
+  - internal/util
+  - nfs
+  - xfs
 - name: golang.org/x/crypto
-  version: 159ae71589f303f9fbfd7528413e0fe944b9c1cb
+  version: df8d4716b3472e4a531c33cedbe537dae921a1a9
   subpackages:
   - curve25519
   - ed25519
