@@ -26,7 +26,7 @@ var (
 	ol            *onelogin.OneLogin
 	manualRefresh chan (bool)
 	knownUsers    = prometheus.NewGauge(prometheus.GaugeOpts{
-		Name: "known_users",
+		Name: "pubkeyd_known_users",
 		Help: "Current number of known users.",
 	})
 )
