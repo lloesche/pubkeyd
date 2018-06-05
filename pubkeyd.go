@@ -19,21 +19,37 @@ import (
 )
 
 var (
-	log           = logging.MustGetLogger("pubkeyd")
-	users         map[string]string
-	refreshMutex  = &sync.RWMutex{}
-	pubkeyCache   *cache.Cache
-	ol            *onelogin.OneLogin
-	manualRefresh chan (bool)
-	knownUsers    = prometheus.NewGauge(prometheus.GaugeOpts{
+	log              = logging.MustGetLogger("pubkeyd")
+	users            map[string]string
+	refreshMutex     = &sync.RWMutex{}
+	pubkeyCache      *cache.Cache
+	ol               *onelogin.OneLogin
+	manualRefresh    chan (bool)
+	metricKnownUsers = prometheus.NewGauge(prometheus.GaugeOpts{
 		Name: "pubkeyd_known_users",
-		Help: "Current number of known users.",
+		Help: "Number of currently known users.",
 	})
+	metricOneLoginRefreshesTotal = prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "pubkeyd_onelogin_refreshes_total",
+		Help: "Number of OneLogin users refreshes.",
+	})
+	metricAuthorizedKeysRequestsTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "pubkeyd_authorized_keys_requests_total",
+		Help: "Number of authorized_keys requests, partitioned by status code and HTTP method.",
+	}, []string{"code", "method"},
+	)
+	metricGithubNameRequestsTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "pubkeyd_github_name_requests_total",
+		Help: "Number of github_name requests, partitioned by status code and HTTP method.",
+	}, []string{"code", "method"},
+	)
 )
 
 func init() {
-	// Metrics have to be registered to be exposed:
-	prometheus.MustRegister(knownUsers)
+	prometheus.MustRegister(metricKnownUsers)
+	prometheus.MustRegister(metricOneLoginRefreshesTotal)
+	prometheus.MustRegister(metricAuthorizedKeysRequestsTotal)
+	prometheus.MustRegister(metricGithubNameRequestsTotal)
 }
 
 // main function to boot up everything
@@ -91,11 +107,11 @@ func main() {
 	if *auth == "" {
 		router.HandleFunc("/authorized_keys/{id}", getAuthorizedKeys).Methods("GET")
 		router.HandleFunc("/authorized_keys/{id}", deleteAuthorizedKeys).Methods("DELETE")
-		router.HandleFunc("/githubname/{id}", getGithubName).Methods("GET")
+		router.HandleFunc("/github_name/{id}", getGithubName).Methods("GET")
 	} else {
 		router.HandleFunc("/authorized_keys/{id}", getAuthorizedKeys).Methods("GET").Queries("auth", *auth)
 		router.HandleFunc("/authorized_keys/{id}", deleteAuthorizedKeys).Methods("DELETE").Queries("auth", *auth)
-		router.HandleFunc("/githubname/{id}", getGithubName).Methods("GET").Queries("auth", *auth)
+		router.HandleFunc("/github_name/{id}", getGithubName).Methods("GET").Queries("auth", *auth)
 	}
 	if *refreshAuth == "" {
 		if *auth == "" {
@@ -119,7 +135,8 @@ func refreshOneLoginUsers() error {
 	refreshMutex.Lock()
 	users = githubUsers
 	refreshMutex.Unlock()
-	knownUsers.Set(float64(len(githubUsers)))
+	metricKnownUsers.Set(float64(len(githubUsers)))
+	metricOneLoginRefreshesTotal.Inc()
 	return nil
 }
 
@@ -131,6 +148,7 @@ func deleteAuthorizedKeys(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/plain")
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("Purging authorized_keys cache for user " + user + "\n"))
+	metricAuthorizedKeysRequestsTotal.WithLabelValues("200", "DELETE").Inc()
 }
 
 func doRefresh(w http.ResponseWriter, r *http.Request) {
@@ -164,6 +182,7 @@ func getAuthorizedKeys(w http.ResponseWriter, r *http.Request) {
 				log.Errorf("User %s found but authorized_keys unretrievable", user)
 				w.WriteHeader(http.StatusServiceUnavailable)
 				w.Write([]byte("503 couldn't retrieve users authorized_keys\n"))
+				metricAuthorizedKeysRequestsTotal.WithLabelValues("503", "GET").Inc()
 				return
 			}
 			pubkeyCache.Set(user, authorizedKeys, cache.DefaultExpiration)
@@ -171,11 +190,13 @@ func getAuthorizedKeys(w http.ResponseWriter, r *http.Request) {
 		log.Infof("Returning authorized_keys of github user %s", githubName)
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(authorizedKeys))
+		metricAuthorizedKeysRequestsTotal.WithLabelValues("200", "GET").Inc()
 		return
 	}
 	log.Errorf("User %s not found", user)
 	w.WriteHeader(http.StatusNotFound)
 	w.Write([]byte("404 user not found\n"))
+	metricAuthorizedKeysRequestsTotal.WithLabelValues("404", "GET").Inc()
 }
 
 func getGithubName(w http.ResponseWriter, r *http.Request) {
@@ -188,11 +209,13 @@ func getGithubName(w http.ResponseWriter, r *http.Request) {
 		log.Infof("Found user %s with github name %s", params["id"], githubName)
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(githubName + "\n"))
+		metricGithubNameRequestsTotal.WithLabelValues("200", "GET").Inc()
 		return
 	}
 	log.Errorf("User %s not found", params["id"])
 	w.WriteHeader(http.StatusNotFound)
 	w.Write([]byte("404 user not found\n"))
+	metricGithubNameRequestsTotal.WithLabelValues("404", "GET").Inc()
 }
 
 func getHealth(w http.ResponseWriter, r *http.Request) {
