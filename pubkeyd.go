@@ -14,14 +14,27 @@ import (
 	"github.com/op/go-logging"
 	"github.com/oswell/onelogin-go"
 	"github.com/patrickmn/go-cache"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
-var log = logging.MustGetLogger("pubkeyd")
-var users map[string]string
-var refreshMutex = &sync.RWMutex{}
-var pubkeyCache *cache.Cache
-var ol *onelogin.OneLogin
-var manualRefresh chan (bool)
+var (
+	log           = logging.MustGetLogger("pubkeyd")
+	users         map[string]string
+	refreshMutex  = &sync.RWMutex{}
+	pubkeyCache   *cache.Cache
+	ol            *onelogin.OneLogin
+	manualRefresh chan (bool)
+	knownUsers    = prometheus.NewGauge(prometheus.GaugeOpts{
+		Name: "known_users",
+		Help: "Current number of known users.",
+	})
+)
+
+func init() {
+	// Metrics have to be registered to be exposed:
+	prometheus.MustRegister(knownUsers)
+}
 
 // main function to boot up everything
 func main() {
@@ -73,6 +86,7 @@ func main() {
 	router := mux.NewRouter()
 	listenOn := ":" + strconv.Itoa(*port)
 	router.HandleFunc("/health", getHealth).Methods("GET")
+	router.PathPrefix("/metrics").Handler(promhttp.Handler())
 	// fixme: refactor this
 	if *auth == "" {
 		router.HandleFunc("/authorized_keys/{id}", getAuthorizedKeys).Methods("GET")
@@ -105,6 +119,7 @@ func refreshOneLoginUsers() error {
 	refreshMutex.Lock()
 	users = githubUsers
 	refreshMutex.Unlock()
+	knownUsers.Set(float64(len(githubUsers)))
 	return nil
 }
 
