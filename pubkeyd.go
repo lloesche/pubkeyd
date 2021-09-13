@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"sync"
 	"time"
+	"strings"
 
 	"github.com/fatz/ghpubkey-go/ghpubkey"
 	"github.com/gorilla/mux"
@@ -18,9 +19,12 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
+type RoleList map[string][]string
+
 var (
 	log              = logging.MustGetLogger("pubkeyd")
 	users            map[string]string
+	roles 					 RoleList
 	refreshMutex     = &sync.RWMutex{}
 	pubkeyCache      *cache.Cache
 	ol               *onelogin.OneLogin
@@ -106,6 +110,7 @@ func main() {
 	// fixme: refactor this
 	if *auth == "" {
 		router.HandleFunc("/authorized_keys/{id}", getAuthorizedKeys).Methods("GET")
+		router.HandleFunc("/role_authorized_keys/{role}", getRoleAuthorizedKeys).Methods("GET")
 		router.HandleFunc("/authorized_keys/{id}", deleteAuthorizedKeys).Methods("DELETE")
 		router.HandleFunc("/github_name/{id}", getGithubName).Methods("GET")
 	} else {
@@ -128,12 +133,14 @@ func main() {
 
 func refreshOneLoginUsers() error {
 	log.Debug("Refreshing OneLogin users")
-	githubUsers, err := getGithubUsers(*ol)
+	githubUsers, roleList, err := getGithubUsers(*ol)
 	if err != nil {
 		return err
 	}
+
 	refreshMutex.Lock()
 	users = githubUsers
+	roles = roleList
 	refreshMutex.Unlock()
 	metricKnownUsers.Set(float64(len(githubUsers)))
 	metricOneLoginRefreshesTotal.Inc()
@@ -157,6 +164,80 @@ func doRefresh(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/plain")
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("Refreshing OneLogin users\n"))
+}
+
+func getGithubNamesForUsers(us []string) ([]string) {
+	ghNames := make([]string, 0)
+
+	refreshMutex.RLock()
+	for _, u := range us {
+		gh, ok := users[u]
+		if !ok {
+			continue
+		}
+		ghNames = append(ghNames, gh)
+	}
+	refreshMutex.RUnlock()
+
+	return ghNames
+}
+
+func getKeys(keyNames []string) ([]string, error) {
+	keys := make([]string, 0)
+
+	for _, user := range keyNames {
+		var authorizedKeys string
+		cachedAuthorizedKeys, found := pubkeyCache.Get(user)
+		if found {
+			log.Debugf("authorized_keys for user %s found in cache", user)
+			authorizedKeys  = cachedAuthorizedKeys.(string)
+		} else {
+			log.Debugf("authorized_keys for user %s not found in cache", user)
+			var err error
+
+			g := ghpubkey.NewGHPubKey()
+			authorizedKeys, err = g.RequestKeysForUser(user)
+			if err != nil {
+				log.Errorf("User %s found but authorized_keys unretrievable", user)
+				continue
+			}
+
+			pubkeyCache.Set(user, authorizedKeys, cache.DefaultExpiration)
+		}
+
+		keys = append(keys, authorizedKeys)
+	}
+
+	return keys, nil
+}
+
+func getRoleAuthorizedKeys(w http.ResponseWriter, r *http.Request) {
+	params := mux.Vars(r)
+	role := params["role"]
+	refreshMutex.RLock()
+	roleUsers, ok := roles[role]
+	refreshMutex.RUnlock()
+
+	if ok {
+		ghNames := getGithubNamesForUsers(roleUsers)
+		if len(ghNames) > 0 {
+			keys, err := getKeys(ghNames)
+			if err != nil {
+				log.Errorf("Role %s found but authorized_keys unretrievable", role)
+				w.WriteHeader(http.StatusServiceUnavailable)
+				w.Write([]byte("503 couldn't retrieve roles authorized_keys\n"))
+				metricAuthorizedKeysRequestsTotal.WithLabelValues("503", "GET").Inc()
+				return
+			}
+
+			authorizedKeys := strings.Join(keys, "") //keys are engind with a new line
+			log.Infof("Returning authorized_keys of role %s", role)
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(authorizedKeys))
+			metricAuthorizedKeysRequestsTotal.WithLabelValues("200", "GET").Inc()
+			return
+		}
+	}
 }
 
 func getAuthorizedKeys(w http.ResponseWriter, r *http.Request) {
@@ -225,23 +306,50 @@ func getHealth(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte("ok\n"))
 }
 
-func getGithubUsers(onelogin onelogin.OneLogin) (map[string]string, error) {
+func getUserRoleList(roleIDs []int, username string, roleList RoleList, onelogin onelogin.OneLogin) (RoleList, error) {
+	for _, roleID := range roleIDs {
+		rs, err := onelogin.Get_Roles("")
+		if err != nil {
+			return roleList, err
+		}
+
+		for _, r := range rs {
+			if r.Id == roleID {
+				if val, ok := roleList[r.Name]; ok {
+					roleList[r.Name] = append(val, username)
+				} else {
+					roleList[r.Name] = []string{username}
+				}
+			}
+		}
+	}
+
+	return roleList, nil
+}
+
+func getGithubUsers(onelogin onelogin.OneLogin) (map[string]string, RoleList, error) {
 	log.Info("Updating users from OneLogin")
 	githubUsers := make(map[string]string)
+	roles := make(RoleList)
 	filter := make(map[string]string)
 	oneLoginUsers, err := onelogin.Get_Users(filter)
 	if err != nil {
-		return githubUsers, fmt.Errorf("Failed to get users: %v", err)
+		return githubUsers, roles, fmt.Errorf("Failed to get users: %v", err)
 	}
 	for _, user := range *oneLoginUsers {
 		if githubName, ok := user.Custom_attributes["githubname"]; ok {
 			if githubName != "" && user.Status == 1 {
 				log.Debugf("Setting github name for user %s to %s\n", user.Username, githubName)
 				githubUsers[user.Username] = githubName
+
+				roles, err = getUserRoleList(user.Role_id, user.Username, roles, onelogin)
+				if err != nil {
+					log.Errorf("Got error while getting Roles for user %s, %s",user.Username, err)
+				}
 			}
 		}
 	}
-	return githubUsers, nil
+	return githubUsers, roles, nil
 }
 
 func flagFromEnv(envVar string) string {
